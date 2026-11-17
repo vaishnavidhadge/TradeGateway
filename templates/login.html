@@ -1,0 +1,47 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login | TradeGateway</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fc;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh;color:#17233b}
+.card{background:white;width:min(420px,92%);padding:36px;border-radius:16px;box-shadow:0 10px 35px #182e5812}
+h1{color:#315bea;margin-bottom:8px}
+p{color:#748198;font-size:14px}
+label{display:block;margin:20px 0 8px;font-size:13px;font-weight:bold}
+input{width:100%;padding:13px;border:1px solid #dfe5ef;border-radius:8px}
+button{width:100%;margin-top:24px;padding:14px;background:#315bea;color:white;border:0;border-radius:8px;font-weight:bold;cursor:pointer}
+a{color:#315bea;text-decoration:none}
+.message{padding:10px;background:#fff0f0;color:#b42332;border-radius:7px;font-size:13px;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>TradeGateway</h1>
+<p>Welcome back! Login to your trading dashboard.</p>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for category, message in messages %}
+<div class="message">{{ message }}</div>
+{% endfor %}
+{% endwith %}
+
+<form method="POST">
+<label>Email Address</label>
+<input type="email" name="email" placeholder="Enter your email" required>
+
+<label>Password</label>
+<input type="password" name="password" placeholder="Enter password" required>
+
+<button type="submit">Login to Dashboard</button>
+</form>
+
+<p style="text-align:center;margin-top:22px">
+New user? <a href="{{ url_for('register') }}">Create an account</a>
+</p>
+</div>
+</body>
+</html>
