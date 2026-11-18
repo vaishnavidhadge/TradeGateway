@@ -1,4 +1,5 @@
 
+
 from flask import (
     Flask, request, jsonify, render_template,
     redirect, url_for, session, flash
@@ -21,6 +22,7 @@ from database import (
     get_dashboard_stats
 )
 
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -33,7 +35,8 @@ app.secret_key = os.getenv(
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax"
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("RENDER", "") == "true"
 )
 
 logger = setup_logging()
@@ -42,7 +45,7 @@ logger = setup_logging()
 initialize_database()
 
 
-# Check whether user is logged in
+# Login required decorator
 def login_required(function):
     @wraps(function)
     def wrapper(*args, **kwargs):
@@ -60,12 +63,7 @@ def home():
     if "user_id" in session:
         return redirect(url_for("dashboard"))
 
-    return jsonify({
-        "status": "success",
-        "project": "TradeGateway",
-        "mode": "MOCK",
-        "message": "Flask API is running"
-    })
+    return redirect(url_for("login"))
 
 
 # Registration page
@@ -76,8 +74,15 @@ def register():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        full_name = request.form.get("full_name", "").strip()
-        email = request.form.get("email", "").strip().lower()
+
+        full_name = request.form.get(
+            "full_name", ""
+        ).strip()
+
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
+
         password = request.form.get("password", "")
 
         if not full_name or not email or not password:
@@ -89,25 +94,43 @@ def register():
             return redirect(url_for("register"))
 
         if len(password) < 8:
-            flash("Password must contain at least 8 characters.", "error")
+            flash(
+                "Password must contain at least 8 characters.",
+                "error"
+            )
             return redirect(url_for("register"))
 
         if get_user_by_email(email):
-            flash("This email is already registered.", "error")
+            flash(
+                "This email is already registered.",
+                "error"
+            )
             return redirect(url_for("register"))
 
         try:
-            user_id = create_user(full_name, email, password)
+            user_id = create_user(
+                full_name,
+                email,
+                password
+            )
 
             session.clear()
             session["user_id"] = user_id
 
-            flash("Registration successful!", "success")
+            flash(
+                "Registration successful!",
+                "success"
+            )
+
             return redirect(url_for("dashboard"))
 
         except Exception:
             logger.exception("Registration error")
-            flash("Could not create your account.", "error")
+
+            flash(
+                "Could not create your account.",
+                "error"
+            )
 
     return render_template("register.html")
 
@@ -120,18 +143,29 @@ def login():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
+
         password = request.form.get("password", "")
 
         user = get_user_by_email(email)
 
-        if user and verify_password(user["password"], password):
+        if user and verify_password(
+            user["password"],
+            password
+        ):
+
             session.clear()
             session["user_id"] = user["id"]
 
             return redirect(url_for("dashboard"))
 
-        flash("Invalid email or password.", "error")
+        flash(
+            "Invalid email or password.",
+            "error"
+        )
 
     return render_template("login.html")
 
@@ -139,30 +173,38 @@ def login():
 # Logout
 @app.route("/logout")
 def logout():
+
     session.clear()
+
     return redirect(url_for("login"))
 
 
-# Dashboard (protected)
+# Dashboard
 @app.route("/dashboard")
 @login_required
 def dashboard():
 
-    user = get_user_by_id(session["user_id"])
+    user = get_user_by_id(
+        session["user_id"]
+    )
 
     if not user:
         session.clear()
         return redirect(url_for("login"))
 
-    return render_template("index.html", user=user)
+    return render_template(
+        "index.html",
+        user=user
+    )
 
 
-# Place order API (protected)
+# Place order API
 @app.route("/place-order", methods=["POST"])
 @login_required
 def place_order_api():
 
     try:
+
         data = request.get_json(silent=True)
 
         if not isinstance(data, dict):
@@ -172,11 +214,17 @@ def place_order_api():
             }), 400
 
         required_fields = [
-            "broker", "symbol", "qty", "side", "order_type"
+            "broker",
+            "symbol",
+            "qty",
+            "side",
+            "order_type"
         ]
 
         missing = [
-            field for field in required_fields if field not in data
+            field
+            for field in required_fields
+            if field not in data
         ]
 
         if missing:
@@ -194,14 +242,23 @@ def place_order_api():
 
         if not all(
             isinstance(value, str) and value.strip()
-            for value in [broker, symbol, side, order_type]
+            for value in [
+                broker,
+                symbol,
+                side,
+                order_type
+            ]
         ):
             return jsonify({
                 "status": "error",
                 "message": "Invalid string fields"
             }), 400
 
-        if isinstance(qty, bool) or not isinstance(qty, int) or qty <= 0:
+        if (
+            isinstance(qty, bool)
+            or not isinstance(qty, int)
+            or qty <= 0
+        ):
             return jsonify({
                 "status": "error",
                 "message": "Quantity must be a positive integer"
@@ -218,28 +275,45 @@ def place_order_api():
                 "message": "Side must be BUY or SELL"
             }), 400
 
-        if order_type not in ["MARKET", "LIMIT", "SL", "SL-M"]:
+        if order_type not in [
+            "MARKET",
+            "LIMIT",
+            "SL",
+            "SL-M"
+        ]:
             return jsonify({
                 "status": "error",
                 "message": "Invalid order type"
             }), 400
 
         result = place_order(
-            broker, symbol, qty, side, order_type
+            broker,
+            symbol,
+            qty,
+            side,
+            order_type
         )
 
-        # Save order for the currently logged-in user
-        save_order(result, user_id=session["user_id"])
+        # Save order for logged-in user
+        save_order(
+            result,
+            user_id=session["user_id"]
+        )
 
         logger.info(
             "Mock order saved for user %s: %s",
-            session["user_id"], result
+            session["user_id"],
+            result
         )
 
         return jsonify(result), 200
 
     except ValueError as error:
-        logger.warning("Order rejected: %s", error)
+
+        logger.warning(
+            "Order rejected: %s",
+            error
+        )
 
         return jsonify({
             "status": "error",
@@ -247,7 +321,10 @@ def place_order_api():
         }), 400
 
     except Exception:
-        logger.exception("Unexpected order error")
+
+        logger.exception(
+            "Unexpected order error"
+        )
 
         return jsonify({
             "status": "error",
@@ -261,7 +338,10 @@ def place_order_api():
 def order_history():
 
     try:
-        orders = get_all_orders(user_id=session["user_id"])
+
+        orders = get_all_orders(
+            user_id=session["user_id"]
+        )
 
         return jsonify({
             "status": "success",
@@ -270,7 +350,10 @@ def order_history():
         })
 
     except Exception:
-        logger.exception("Order history error")
+
+        logger.exception(
+            "Order history error"
+        )
 
         return jsonify({
             "status": "error",
@@ -278,13 +361,16 @@ def order_history():
         }), 500
 
 
-# Dashboard analytics API (protected)
+# Dashboard analytics API
 @app.route("/api/dashboard-stats", methods=["GET"])
 @login_required
 def dashboard_stats():
 
     try:
-        stats = get_dashboard_stats(session["user_id"])
+
+        stats = get_dashboard_stats(
+            session["user_id"]
+        )
 
         return jsonify({
             "status": "success",
@@ -292,7 +378,10 @@ def dashboard_stats():
         })
 
     except Exception:
-        logger.exception("Dashboard statistics error")
+
+        logger.exception(
+            "Dashboard statistics error"
+        )
 
         return jsonify({
             "status": "error",
@@ -300,13 +389,15 @@ def dashboard_stats():
         }), 500
 
 
-# Run Flask application
+# Run Flask application locally
 if __name__ == "__main__":
 
-    port = int(os.getenv("PORT", "5005"))
+    port = int(
+        os.getenv("PORT", "5005")
+    )
 
     app.run(
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=port,
-        debug=True
+        debug=os.getenv("FLASK_DEBUG", "false").lower() == "true"
     )
